@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Gravity Sandbox · Boddu Saran</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#080c14;overflow:hidden;font-family:'Courier New',monospace}
+  canvas{display:block}
+  #ui{position:fixed;top:16px;left:50%;transform:translateX(-50%);text-align:center;z-index:10;pointer-events:none}
+  #ui h1{font-size:1rem;color:#f59e0b;letter-spacing:3px;text-shadow:0 0 20px #f59e0b}
+  #ui p{font-size:.65rem;color:#666;margin-top:3px;letter-spacing:1px}
+  #controls{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;z-index:10;flex-wrap:wrap;justify-content:center}
+  button{background:rgba(245,158,11,.1);border:1px solid #f59e0b44;color:#f59e0b;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:.7rem;letter-spacing:1px;transition:all .3s;font-family:'Courier New',monospace}
+  button:hover,button.active{background:rgba(245,158,11,.3);box-shadow:0 0 12px #f59e0b66}
+  a{color:#00e5ff;text-decoration:none;font-size:.7rem;letter-spacing:2px;border:1px solid #00e5ff33;padding:5px 12px;border-radius:20px;background:rgba(0,229,255,.05)}
+  #gravLabel{color:#f59e0b;font-size:.7rem;min-width:80px;text-align:center}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <h1>🪐 GRAVITY SANDBOX</h1>
+  <p>Click to drop balls · Drag to throw them</p>
+</div>
+<div id="controls">
+  <button onclick="setGravity('earth')" class="active" id="btnEarth">🌍 Earth</button>
+  <button onclick="setGravity('moon')" id="btnMoon">🌙 Moon</button>
+  <button onclick="setGravity('zerog')" id="btnZero">🌌 Zero-G</button>
+  <button onclick="setGravity('jupiter')" id="btnJup">🟠 Jupiter</button>
+  <button onclick="addBall()">➕ Ball</button>
+  <button onclick="balls.length=0">🗑 Clear</button>
+  <span id="gravLabel">Earth</span>
+  <a href="https://github.com/sepas1609" target="_blank">sepas1609</a>
+</div>
+<script>
+const c=document.getElementById('c');
+const ctx=c.getContext('2d');
+let W=c.width=innerWidth,H=c.height=innerHeight;
+window.addEventListener('resize',()=>{W=c.width=innerWidth;H=c.height=innerHeight});
+
+const gravities={earth:{g:0.5,name:'Earth',color:'#4ade80'},moon:{g:0.08,name:'Moon',color:'#94a3b8'},zerog:{g:0,name:'Zero-G',color:'#00e5ff'},jupiter:{g:1.3,name:'Jupiter',color:'#f97316'}};
+let currentGravity=gravities.earth;
+const gravLabel=document.getElementById('gravLabel');
+
+function setGravity(key){
+  currentGravity=gravities[key];
+  gravLabel.textContent=currentGravity.name;
+  document.querySelectorAll('#controls button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn'+key.charAt(0).toUpperCase()+key.slice(1))?.classList.add('active');
+}
+
+const balls=[];
+const hues=[200,280,340,30,120,60];
+let hueIdx=0;
+
+function addBall(x,y,vx,vy){
+  const r=12+Math.random()*18;
+  balls.push({
+    x:x||W/2+(Math.random()-.5)*100,
+    y:y||H*0.2,
+    vx:vx||( Math.random()-.5)*3,
+    vy:vy||0,
+    r,
+    hue:hues[hueIdx++%hues.length],
+    trail:[],
+    bounce:0.65+Math.random()*.2,
+    friction:0.98,
+    spin:0,spinV:(Math.random()-.5)*.1
+  });
+}
+
+// Spawn some initial balls
+for(let i=0;i<6;i++) addBall(100+Math.random()*(W-200),50+Math.random()*200);
+
+let dragging=null,dragX=0,dragY=0,dragVX=0,dragVY=0,prevDX=0,prevDY=0;
+
+c.addEventListener('mousedown',e=>{
+  for(const b of balls){
+    if(Math.hypot(b.x-e.clientX,b.y-e.clientY)<b.r+10){
+      dragging=b;b.vx=0;b.vy=0;
+      dragX=e.clientX;dragY=e.clientY;
+      return;
+    }
+  }
+  addBall(e.clientX,e.clientY,0,0);
+});
+
+c.addEventListener('mousemove',e=>{
+  if(dragging){
+    prevDX=dragging.x;prevDY=dragging.y;
+    dragging.x=e.clientX;dragging.y=e.clientY;
+  }
+});
+
+c.addEventListener('mouseup',e=>{
+  if(dragging){
+    dragging.vx=(e.clientX-dragX)*0.12;
+    dragging.vy=(e.clientY-dragY)*0.12;
+    dragging=null;
+  }
+});
+
+c.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];addBall(t.clientX,t.clientY,0,0)},{passive:false});
+c.addEventListener('touchmove',e=>{e.preventDefault();},{passive:false});
+
+// Grid lines
+function drawGrid(){
+  ctx.strokeStyle='rgba(245,158,11,0.04)';ctx.lineWidth=1;
+  for(let x=0;x<W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+  for(let y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+}
+
+// Platforms
+const platforms=[
+  {x:W*.1,y:H*.7,w:W*.18},
+  {x:W*.35,y:H*.55,w:W*.15},
+  {x:W*.6,y:H*.65,w:W*.2},
+  {x:W*.15,y:H*.4,w:W*.12},
+  {x:W*.72,y:H*.45,w:W*.14},
+];
+
+function drawPlatforms(){
+  for(const p of platforms){
+    const grd=ctx.createLinearGradient(p.x,p.y,p.x+p.w,p.y);
+    grd.addColorStop(0,'rgba(245,158,11,0)');
+    grd.addColorStop(0.3,'rgba(245,158,11,0.6)');
+    grd.addColorStop(0.7,'rgba(245,158,11,0.6)');
+    grd.addColorStop(1,'rgba(245,158,11,0)');
+    ctx.fillStyle=grd;
+    ctx.fillRect(p.x,p.y,p.w,3);
+    ctx.fillStyle='rgba(245,158,11,0.05)';
+    ctx.fillRect(p.x,p.y+3,p.w,H);
+  }
+}
+
+let frame=0;
+function draw(){
+  frame++;
+  ctx.fillStyle='rgba(8,12,20,0.3)';
+  ctx.fillRect(0,0,W,H);
+
+  drawGrid();
+  drawPlatforms();
+
+  // Floor glow
+  const floorGrd=ctx.createLinearGradient(0,H-4,0,H);
+  floorGrd.addColorStop(0,'rgba(245,158,11,0.5)');
+  floorGrd.addColorStop(1,'rgba(245,158,11,0)');
+  ctx.fillStyle=floorGrd;ctx.fillRect(0,H-4,W,4);
+
+  for(const b of balls){
+    if(b===dragging){b.trail=[];continue;}
+
+    // Physics
+    b.vy+=currentGravity.g;
+    b.vx*=b.friction;
+    b.vy*=b.friction;
+    b.spin+=b.spinV;
+
+    // Zero-G slight drift
+    if(currentGravity.g===0){b.vy*=0.995;b.vx*=0.995;}
+
+    b.x+=b.vx;b.y+=b.vy;
+    b.spinV*=0.99;
+
+    // Floor
+    if(b.y+b.r>H-2){b.y=H-2-b.r;b.vy*=-b.bounce;b.vx*=0.85;b.spinV=(b.vx*0.05);}
+
+    // Walls
+    if(b.x-b.r<0){b.x=b.r;b.vx*=-b.bounce;}
+    if(b.x+b.r>W){b.x=W-b.r;b.vx*=-b.bounce;}
+
+    // Ceiling
+    if(b.y-b.r<0){b.y=b.r;b.vy*=-b.bounce;}
+
+    // Platform collisions
+    for(const p of platforms){
+      if(b.x+b.r>p.x&&b.x-b.r<p.x+p.w&&b.y+b.r>p.y&&b.y+b.r<p.y+20&&b.vy>0){
+        b.y=p.y-b.r;b.vy*=-b.bounce;b.vx*=0.85;b.spinV=b.vx*0.04;
+      }
+    }
+
+    b.trail.unshift({x:b.x,y:b.y});
+    if(b.trail.length>20)b.trail.pop();
+
+    // Trail
+    for(let i=1;i<b.trail.length;i++){
+      const a=(1-i/b.trail.length)*0.4;
+      ctx.strokeStyle=`hsla(${b.hue},90%,65%,${a})`;
+      ctx.lineWidth=b.r*0.5*(1-i/b.trail.length);
+      ctx.beginPath();ctx.moveTo(b.trail[i-1].x,b.trail[i-1].y);ctx.lineTo(b.trail[i].x,b.trail[i].y);ctx.stroke();
+    }
+
+    // Glow
+    const grd=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r*2.5);
+    grd.addColorStop(0,`hsla(${b.hue},100%,70%,0.25)`);
+    grd.addColorStop(1,`hsla(${b.hue},100%,70%,0)`);
+    ctx.fillStyle=grd;ctx.beginPath();ctx.arc(b.x,b.y,b.r*2.5,0,Math.PI*2);ctx.fill();
+
+    // Ball body
+    ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.spin);
+    const grad=ctx.createRadialGradient(-b.r*.3,-b.r*.3,0,0,0,b.r);
+    grad.addColorStop(0,`hsl(${b.hue+40},90%,85%)`);
+    grad.addColorStop(0.5,`hsl(${b.hue},85%,60%)`);
+    grad.addColorStop(1,`hsl(${b.hue-20},70%,30%)`);
+    ctx.fillStyle=grad;ctx.beginPath();ctx.arc(0,0,b.r,0,Math.PI*2);ctx.fill();
+    // Shine
+    ctx.fillStyle='rgba(255,255,255,0.35)';
+    ctx.beginPath();ctx.arc(-b.r*.3,-b.r*.3,b.r*.25,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+
+    // Gravity indicator for Zero-G
+    if(currentGravity.g===0&&frame%60===0){
+      b.vx+=(Math.random()-.5)*.5;b.vy+=(Math.random()-.5)*.5;
+    }
+  }
+
+  // Ball-ball collisions
+  for(let i=0;i<balls.length;i++){
+    for(let j=i+1;j<balls.length;j++){
+      const a=balls[i],b=balls[j];
+      const dx=b.x-a.x,dy=b.y-a.y;
+      const dist=Math.hypot(dx,dy);
+      const minDist=a.r+b.r;
+      if(dist<minDist&&dist>0){
+        const nx=dx/dist,ny=dy/dist;
+        const overlap=(minDist-dist)/2;
+        a.x-=nx*overlap;a.y-=ny*overlap;
+        b.x+=nx*overlap;b.y+=ny*overlap;
+        const relV=(a.vx-b.vx)*nx+(a.vy-b.vy)*ny;
+        if(relV>0){const imp=relV*.8;a.vx-=imp*nx;a.vy-=imp*ny;b.vx+=imp*nx;b.vy+=imp*ny;}
+      }
+    }
+  }
+
+  // Gravity mode indicator
+  ctx.fillStyle=currentGravity.color;
+  ctx.font='11px Courier New';
+  ctx.fillText(`⇓ ${currentGravity.name} gravity: ${currentGravity.g.toFixed(2)}`,12,30);
+  ctx.fillStyle='#444';
+  ctx.fillText(`${balls.length} balls`,12,46);
+
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>
